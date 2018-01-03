@@ -60,7 +60,6 @@ class CNN():
     def setInputDimensions(self,in_dimensions):
         self.in_dims = in_dimensions
         self.ls_filters = [self.in_dims[3]] + self.ls_filters
-        print(len(self.ls_filters))
         self.fmap_dims = self.in_dims
 
     def getOutputDimensions(self):
@@ -68,7 +67,6 @@ class CNN():
 
     def generateFilterDimensions(self):
         n_conv_layers = len(self.ls_filters) - 1
-        print(n_conv_layers)
         ls_filt_dims = []
         for i in range(n_conv_layers):
             ls_filt_dims.append([self.ls_win_size[i],self.ls_win_size[i],self.ls_filters[i],self.ls_filters[i+1]])
@@ -77,7 +75,7 @@ class CNN():
 
     def layer(self,kernel_dims,stride,padding,Type):
         fmap = self.fmap_dims
-        fmap[1] = (fmap[1]+2*padding - kernel_dims[1])/stride[1] + 1
+        fmap[1] = int((fmap[1]+2*padding - kernel_dims[1])/stride[1] + 1)
         fmap[2] = fmap[1]
         if Type == 'CONV':
             fmap[3] = kernel_dims[3]
@@ -88,9 +86,12 @@ class CNN():
 epochs = 10
 batch_size = 100
 
+out_dims = 0
+ls_filt_dims = []
 def main():
     cnn1 = CNN()
     cnn1.setInputDimensions([100,28,28,1])
+    global out_dims, ls_filt_dims
     ls_filt_dims = cnn1.generateFilterDimensions()
     cnn1.layer(ls_filt_dims[0], [1, 1, 1, 1], 0, Type='CONV')
     cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
@@ -101,8 +102,8 @@ def main():
     cnn1.layer(ls_filt_dims[3], [1, 1, 1, 1], 0, Type='CONV')
     cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
     out_dims = cnn1.getOutputDimensions()
-    print(out_dims)
 
+main()
 
 
 gph = tf.Graph()
@@ -113,22 +114,9 @@ with gph.as_default():
     y = tf.placeholder('float',shape = (batch_size,10))
 
     # computing no.of input features for Fully connected layer
-    cnn1 = CNN()
-    cnn1.setInputDimensions(tf.shape(x))
-    ls_filt_dims = cnn1.generateFilterDimensions()
-    cnn1.layer(ls_filt_dims[0],[1,1,1,1],0,Type = 'CONV')
-    cnn1.layer([1,2,2,1],[1,1,1,1],0,Type='POOL')
-    cnn1.layer(ls_filt_dims[1], [1, 1, 1, 1], 0, Type='CONV')
-    cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
-    cnn1.layer(ls_filt_dims[2], [1, 1, 1, 1], 0, Type='CONV')
-    cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
-    cnn1.layer(ls_filt_dims[3], [1, 1, 1, 1], 0, Type='CONV')
-    cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
-    out_dims = cnn1.getOutputDimensions()
-    
     initializer = tf.contrib.layers.xavier_initializer()
-    kern = []
-    bias = []
+    kern = [0]*4
+    bias = [0]*4
 
     fmap = x
     for i in range(4):
@@ -143,7 +131,7 @@ with gph.as_default():
 
     # fully connected layer
     flayer_in = tf.reshape(fmap,shape = (out_dims[0],flat_dim))
-    fw1 = tf.Variable(initializer(shape = (16*16*5,100)),name = "fw1")
+    fw1 = tf.Variable(initializer(shape = (flat_dim,100)),name = "fw1")
     fb1 = tf.Variable(initializer(shape=[100]),name = "fb1")
     fw2 = tf.Variable(initializer(shape = (100,50)),name = "fw2")
     fb2 = tf.Variable(initializer(shape=[50]),name = "fb2")
