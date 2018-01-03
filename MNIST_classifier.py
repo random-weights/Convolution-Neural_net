@@ -3,48 +3,90 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
-y_batch_train =0
-x_batch_train = 0
-y_train = 0
-x_train = 0
-labels = 0
 
-def data():
-    #print("Reading from CSV file..")
-    df = pd.read_csv("data/mnist_train.csv",sep=',',header = None)
-    global labels,x_train
-    labels = np.array(df[df.columns[0]])
-    df.drop(df.columns[0],axis = 1,inplace = True)
-    a = np.zeros(shape = (len(df),28,28))
-    #print("\nConverting to numpy array..")
-    for i in range(len(df)):
-        a[i] = df.iloc[i].values.reshape(28,28)
+class Data():
 
-    x_train = a
+    def __init__(self,data_path = None):
+        if data_path is None:
+            self.data_path = "data/mnist_train.csv"
+        else:
+            self.data_path = data_path
+        self.get_xdata()
+        self.get_ydata()
+
+    def get_xdata(self):
+        df = pd.read_csv(self.data_path, sep=',', header=None)
+        self.labels = np.array(df[df.columns[0]])
+        df.drop(df.columns[0], axis=1, inplace=True)
+        a = np.zeros(shape=(len(df), 28, 28))
+        for i in range(len(df)):
+            a[i] = df.iloc[i].values.reshape(28, 28)
+        self.x_train = a
+
+    def get_ydata(self,labels = None):
+
+        if labels is None:
+            temp_labels = self.labels
+        else:
+            temp_labels = labels
+
+        a = np.array(temp_labels)
+        b = np.zeros((len(temp_labels), 10), dtype=np.int)
+        b[np.arange(len(temp_labels)), a] = 1
+        self.y_train = np.array(b)
+        return self.y_train
+
+    def get_rand_batch(self,batch_size = None):
+        if batch_size is None:
+            b_size = 100
+        else:
+            b_size = batch_size
+
+        rand_indices = np.random.choice(60000, b_size, replace=False)
+        x_batch_train = self.x_train[rand_indices]
+        self.x_batch_train = x_batch_train.reshape(b_size, 28, 28, 1)
+        self.y_batch_train = self.y_train[rand_indices]
 
 
-def one_hot():
-    a = np.array(labels)
-    b = np.zeros((len(labels), 10), dtype=np.int)
-    b[np.arange(len(labels)), a] = 1
+class CNN():
 
-    global y_train
-    y_train = np.array(b)
+    def __init__(self,ls_window_size = None):
+        self.ls_filters = [100,75,50,25]
+        if ls_window_size is None:
+            self.ls_win_size = [3,3,3,3]
+        else:
+            self.ls_win_size = ls_window_size
+
+    def setInputDimensions(self,in_dimensions):
+        self.in_dims = in_dimensions
+        self.ls_filters = [self.in_dims[3]] + self.ls_filters
+        print(len(self.ls_filters))
+        self.fmap_dims = self.in_dims
+
+    def getOutputDimensions(self):
+        return self.fmap_dims
+
+    def generateFilterDimensions(self):
+        n_conv_layers = len(self.ls_filters) - 1
+        print(n_conv_layers)
+        ls_filt_dims = []
+        for i in range(n_conv_layers):
+            ls_filt_dims.append([self.ls_win_size[i],self.ls_win_size[i],self.ls_filters[i],self.ls_filters[i+1]])
+        self.ls_filt_dims = ls_filt_dims
+        return(self.ls_filt_dims)
+
+    def layer(self,kernel_dims,stride,padding,Type):
+        fmap = self.fmap_dims
+        fmap[1] = (fmap[1]+2*padding - kernel_dims[1])/stride[1] + 1
+        fmap[2] = fmap[1]
+        if Type == 'CONV':
+            fmap[3] = kernel_dims[3]
+
+        self.fmap_dims = fmap
 
 
-def get_training_data(batch_size):
-
-    rand_indices = np.random.choice(60000,batch_size,replace = False)
-    #print("\nExtracting Random Values..")
-    global y_batch_train,x_batch_train
-    x_batch_train = x_train[rand_indices]
-    x_batch_train = x_batch_train.reshape(batch_size,28,28,1)
-    y_batch_train = y_train[rand_indices]
-
-
+epochs = 10
 batch_size = 100
-epochs = 1000
-
 
 gph = tf.Graph()
 with gph.as_default():
@@ -127,18 +169,17 @@ with gph.as_default():
 
 with tf.Session(graph=gph) as sess:
     sess.run(tf.global_variables_initializer())
+    train_data = Data()
+
     ls_loss = []
-    data()
-    one_hot()
     for i in range(epochs):
-        get_training_data(batch_size)
-        _,loss = sess.run([opt,cost],feed_dict={x:x_batch_train,y:y_batch_train})
+        train_data.get_rand_batch(batch_size)
+        _,loss = sess.run([opt,cost],feed_dict={x:train_data.x_batch_train,y:train_data.y_batch_train})
         ls_loss.append(loss)
         print("epoch: ",i,"\tLoss: ",loss)
 
     plt.plot(range(epochs),ls_loss)
     plt.show()
-
 
 
 
