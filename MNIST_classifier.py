@@ -83,7 +83,7 @@ class CNN():
         self.fmap_dims = fmap
 
 
-epochs = 10
+epochs = 1000
 batch_size = 100
 
 out_dims = 0
