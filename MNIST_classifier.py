@@ -88,6 +88,23 @@ class CNN():
 epochs = 10
 batch_size = 100
 
+def main():
+    cnn1 = CNN()
+    cnn1.setInputDimensions([100,28,28,1])
+    ls_filt_dims = cnn1.generateFilterDimensions()
+    cnn1.layer(ls_filt_dims[0], [1, 1, 1, 1], 0, Type='CONV')
+    cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
+    cnn1.layer(ls_filt_dims[1], [1, 1, 1, 1], 0, Type='CONV')
+    cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
+    cnn1.layer(ls_filt_dims[2], [1, 1, 1, 1], 0, Type='CONV')
+    cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
+    cnn1.layer(ls_filt_dims[3], [1, 1, 1, 1], 0, Type='CONV')
+    cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
+    out_dims = cnn1.getOutputDimensions()
+    print(out_dims)
+
+
+
 gph = tf.Graph()
 with gph.as_default():
 
@@ -95,55 +112,37 @@ with gph.as_default():
     x = tf.placeholder('float',shape = (batch_size,28,28,1))
     y = tf.placeholder('float',shape = (batch_size,10))
 
+    # computing no.of input features for Fully connected layer
+    cnn1 = CNN()
+    cnn1.setInputDimensions(tf.shape(x))
+    ls_filt_dims = cnn1.generateFilterDimensions()
+    cnn1.layer(ls_filt_dims[0],[1,1,1,1],0,Type = 'CONV')
+    cnn1.layer([1,2,2,1],[1,1,1,1],0,Type='POOL')
+    cnn1.layer(ls_filt_dims[1], [1, 1, 1, 1], 0, Type='CONV')
+    cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
+    cnn1.layer(ls_filt_dims[2], [1, 1, 1, 1], 0, Type='CONV')
+    cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
+    cnn1.layer(ls_filt_dims[3], [1, 1, 1, 1], 0, Type='CONV')
+    cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
+    out_dims = cnn1.getOutputDimensions()
+    
     initializer = tf.contrib.layers.xavier_initializer()
-    # --------------layer 1------------------
-    in_shape = tf.shape(x)
-    kern1 = tf.Variable(initializer(shape =(3,3,1,30)),name = "kern1")
-    map1 = tf.nn.conv2d(x,kern1,strides = [1,1,1,1],padding = 'VALID')
-    map_shape = tf.shape(map1)
-    bias1 = tf.Variable(initializer(shape = [30]),name = "bias1")
-    l1 = tf.nn.relu(map1 + bias1)
+    kern = []
+    bias = []
 
-    #---------pooling layer1------------------
-    l1_pool = tf.nn.max_pool(l1,[1,2,2,1],strides = [1,1,1,1],padding = 'VALID')
-    in_shape = tf.shape(l1_pool)
+    fmap = x
+    for i in range(4):
+        kern[i] = tf.Variable(initializer(shape = ls_filt_dims[i]))
+        bias[i] = tf.Variable(initializer(shape = [ls_filt_dims[i][3]]))
+        fmap = tf.nn.conv2d(fmap,kern[i],[1,1,1,1],'VALID')
+        layer = tf.nn.relu(fmap + bias[i])
+        layer_pool = tf.nn.max_pool(layer,[1,2,2,1],[1,1,1,1],'VALID')
+        fmap = layer_pool
 
-    #----------layer2---------------------
-    kern2 = tf.Variable(initializer(shape = (3,3,30,20)),name = "kern2")
-    map2 = tf.nn.conv2d(l1_pool,kern2,strides = [1,1,1,1],padding = 'VALID')
-    map_shape = tf.shape(map2)
-    bias2 = tf.Variable(initializer(shape = [20]),name = "bias2")
-    l2 = tf.nn.relu(map2+bias2)
-
-    # --------------pooling layer2---------------
-    l2_pool = tf.nn.max_pool(l2,[1,2,2,1],strides = [1,1,1,1],padding = 'VALID')
-    in_shape = tf.shape(l2_pool)
-
-    # ---------------layer3---------------------
-    kern3 = tf.Variable(initializer(shape=(3, 3,20, 10)),name = "kern3")
-    map3 = tf.nn.conv2d(l2_pool, kern3, strides=[1, 1, 1, 1], padding='VALID')
-    map_shape = tf.shape(map3)
-    bias3 = tf.Variable(initializer(shape=[10]),name = "bias3")
-    l3 = tf.nn.relu(map3 + bias3)
-
-    # --------------pooling layer3---------------
-    l3_pool = tf.nn.max_pool(l3, [1, 2, 2, 1], strides=[1, 1, 1, 1], padding='VALID')
-    in_shape = tf.shape(l3_pool)
-
-    # ---------------layer4---------------------
-    kern4 = tf.Variable(initializer(shape=(3, 3, 10, 5)),name = "kern4")
-    map4 = tf.nn.conv2d(l3_pool, kern4, strides=[1, 1, 1, 1], padding='VALID')
-    map_shape = tf.shape(map4)
-    bias4 = tf.Variable(initializer(shape=[5]),name = "bias4")
-    l4 = tf.nn.relu(map4 + bias4)
-
-    # --------------pooling layer4---------------
-    l4_pool = tf.nn.max_pool(l4, [1, 2, 2, 1], strides=[1, 1, 1, 1], padding='VALID')
-    in_shape = tf.shape(l4_pool)
+    flat_dim = out_dims[1]*out_dims[2]*out_dims[3]
 
     # fully connected layer
-    flat_dim = in_shape[1]*in_shape[2]*in_shape[3]
-    flayer_in = tf.reshape(l4_pool,shape = (in_shape[0],flat_dim))
+    flayer_in = tf.reshape(fmap,shape = (out_dims[0],flat_dim))
     fw1 = tf.Variable(initializer(shape = (16*16*5,100)),name = "fw1")
     fb1 = tf.Variable(initializer(shape=[100]),name = "fb1")
     fw2 = tf.Variable(initializer(shape = (100,50)),name = "fw2")
@@ -180,7 +179,6 @@ with tf.Session(graph=gph) as sess:
 
     plt.plot(range(epochs),ls_loss)
     plt.show()
-
 
 
 
