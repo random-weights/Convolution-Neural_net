@@ -48,63 +48,21 @@ class Data():
         self.y_batch_train = self.y_train[rand_indices]
 
 
-class CNN():
+'''
+Dimensions will be calculated manually since the no.of layers are small
+but when the layers grow i will define new functions to populate the filter sizes 
+and compute FC layer dimensions.
 
-    def __init__(self,ls_window_size = None):
-        self.ls_filters = [100,75,50,25]
-        if ls_window_size is None:
-            self.ls_win_size = [3,3,3,3]
-        else:
-            self.ls_win_size = ls_window_size
+graph looks like:
 
-    def setInputDimensions(self,in_dimensions):
-        self.in_dims = in_dimensions
-        self.ls_filters = [self.in_dims[3]] + self.ls_filters
-        self.fmap_dims = self.in_dims
+Input -> conv1 -> pool1 -> relu-> conv2 -> pool2 -> relu-> conv3 -> pool3 -> relu
 
-    def getOutputDimensions(self):
-        return self.fmap_dims
+-> conv4 -> pool4 -> relu -> FC1 -> RelU -> FC2 -> Softmax 
 
-    def generateFilterDimensions(self):
-        n_conv_layers = len(self.ls_filters) - 1
-        ls_filt_dims = []
-        for i in range(n_conv_layers):
-            ls_filt_dims.append([self.ls_win_size[i],self.ls_win_size[i],self.ls_filters[i],self.ls_filters[i+1]])
-        self.ls_filt_dims = ls_filt_dims
-        return(self.ls_filt_dims)
-
-    def layer(self,kernel_dims,stride,padding,Type):
-        fmap = self.fmap_dims
-        fmap[1] = int((fmap[1]+2*padding - kernel_dims[1])/stride[1] + 1)
-        fmap[2] = fmap[1]
-        if Type == 'CONV':
-            fmap[3] = kernel_dims[3]
-
-        self.fmap_dims = fmap
-
+'''
 
 epochs = 1000
-batch_size = 100
-
-out_dims = 0
-ls_filt_dims = []
-def main():
-    cnn1 = CNN()
-    cnn1.setInputDimensions([100,28,28,1])
-    global out_dims, ls_filt_dims
-    ls_filt_dims = cnn1.generateFilterDimensions()
-    cnn1.layer(ls_filt_dims[0], [1, 1, 1, 1], 0, Type='CONV')
-    cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
-    cnn1.layer(ls_filt_dims[1], [1, 1, 1, 1], 0, Type='CONV')
-    cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
-    cnn1.layer(ls_filt_dims[2], [1, 1, 1, 1], 0, Type='CONV')
-    cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
-    cnn1.layer(ls_filt_dims[3], [1, 1, 1, 1], 0, Type='CONV')
-    cnn1.layer([1, 2, 2, 1], [1, 1, 1, 1], 0, Type='POOL')
-    out_dims = cnn1.getOutputDimensions()
-
-main()
-
+batch_size = 128
 
 gph = tf.Graph()
 with gph.as_default():
@@ -113,11 +71,11 @@ with gph.as_default():
     x = tf.placeholder('float',shape = (batch_size,28,28,1))
     y = tf.placeholder('float',shape = (batch_size,10))
 
-    # computing no.of input features for Fully connected layer
     initializer = tf.contrib.layers.xavier_initializer()
     kern = [0]*4
     bias = [0]*4
 
+    ls_filt_dims = [[3,3,1,16],[3,3,16,32],[3,3,32,64],[3,3,64,128]]
     fmap = x
     for i in range(4):
         kern[i] = tf.Variable(initializer(shape = ls_filt_dims[i]))
@@ -127,37 +85,28 @@ with gph.as_default():
         layer_pool = tf.nn.max_pool(layer,[1,2,2,1],[1,1,1,1],'VALID')
         fmap = layer_pool
 
+    #the list out_dims is calculated manually
+    out_dims = [batch_size,16,16,128]
     flat_dim = out_dims[1]*out_dims[2]*out_dims[3]
 
     # fully connected layer
-    flayer_in = tf.reshape(fmap,shape = (out_dims[0],flat_dim))
-    fw1 = tf.Variable(initializer(shape = (flat_dim,100)),name = "fw1")
-    fb1 = tf.Variable(initializer(shape=[100]),name = "fb1")
-    fw2 = tf.Variable(initializer(shape = (100,50)),name = "fw2")
-    fb2 = tf.Variable(initializer(shape=[50]),name = "fb2")
-    fw3 = tf.Variable(initializer(shape=(50,25)),name = "fw3")
-    fb3 = tf.Variable(initializer(shape=[25]),name = "fb3")
-    fw4 = tf.Variable(initializer(shape=(25,10)),name = "fw4")
-    fb4 = tf.Variable(initializer(shape=[10]),name = "fb4")
+    fw = [0]*4
+    fb = [0]*4
 
-    fz1 = tf.matmul(flayer_in,fw1) + fb1
-    fa1 = tf.nn.relu(fz1)
+    ls_weight_dims = [[flat_dim, 128], [128, 64], [64, 32], [32, 10]]
+    fa = tf.reshape(fmap,shape = (out_dims[0],flat_dim))
+    for i in range(4):
+        fw[i] = tf.Variable(initializer(shape = ls_weight_dims[i]))
+        fb[i] = tf.Variable(initializer(shape = [ls_weight_dims[i][1]]))
+        fz = tf.matmul(fa,fw[i])+fb[i]
+        fa = tf.nn.relu(fz)
 
-    fz2 = tf.matmul(fa1, fw2) + fb2
-    fa2 = tf.nn.relu(fz2)
-
-    fz3 = tf.matmul(fa2, fw3) + fb3
-    fa3 = tf.nn.relu(fz3)
-
-    fz4 = tf.matmul(fa3, fw4) + fb4
-
-    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = fz4,labels=y))
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = fz,labels=y))
     opt = tf.train.AdamOptimizer().minimize(cost)
 
 with tf.Session(graph=gph) as sess:
     sess.run(tf.global_variables_initializer())
     train_data = Data()
-
     ls_loss = []
     for i in range(epochs):
         train_data.get_rand_batch(batch_size)
