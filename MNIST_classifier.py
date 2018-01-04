@@ -3,48 +3,66 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
-y_batch_train =0
-x_batch_train = 0
-y_train = 0
-x_train = 0
-labels = 0
 
-def data():
-    #print("Reading from CSV file..")
-    df = pd.read_csv("data/mnist_train.csv",sep=',',header = None)
-    global labels,x_train
-    labels = np.array(df[df.columns[0]])
-    df.drop(df.columns[0],axis = 1,inplace = True)
-    a = np.zeros(shape = (len(df),28,28))
-    #print("\nConverting to numpy array..")
-    for i in range(len(df)):
-        a[i] = df.iloc[i].values.reshape(28,28)
+class Data():
 
-    x_train = a
+    def __init__(self,data_path = None):
+        if data_path is None:
+            self.data_path = "data/mnist_train.csv"
+        else:
+            self.data_path = data_path
+        self.get_xdata()
+        self.get_ydata()
+
+    def get_xdata(self):
+        df = pd.read_csv(self.data_path, sep=',', header=None)
+        self.labels = np.array(df[df.columns[0]])
+        df.drop(df.columns[0], axis=1, inplace=True)
+        a = np.zeros(shape=(len(df), 28, 28))
+        for i in range(len(df)):
+            a[i] = df.iloc[i].values.reshape(28, 28)
+        self.x_train = a
+
+    def get_ydata(self,labels = None):
+
+        if labels is None:
+            temp_labels = self.labels
+        else:
+            temp_labels = labels
+
+        a = np.array(temp_labels)
+        b = np.zeros((len(temp_labels), 10), dtype=np.int)
+        b[np.arange(len(temp_labels)), a] = 1
+        self.y_train = np.array(b)
+        return self.y_train
+
+    def get_rand_batch(self,batch_size = None):
+        if batch_size is None:
+            b_size = 100
+        else:
+            b_size = batch_size
+
+        rand_indices = np.random.choice(60000, b_size, replace=False)
+        x_batch_train = self.x_train[rand_indices]
+        self.x_batch_train = x_batch_train.reshape(b_size, 28, 28, 1)
+        self.y_batch_train = self.y_train[rand_indices]
 
 
-def one_hot():
-    a = np.array(labels)
-    b = np.zeros((len(labels), 10), dtype=np.int)
-    b[np.arange(len(labels)), a] = 1
+'''
+Dimensions will be calculated manually since the no.of layers are small
+but when the layers grow i will define new functions to populate the filter sizes 
+and compute FC layer dimensions.
 
-    global y_train
-    y_train = np.array(b)
+graph looks like:
 
+Input -> conv1 -> pool1 -> relu-> conv2 -> pool2 -> relu-> conv3 -> pool3 -> relu
 
-def get_training_data(batch_size):
+-> conv4 -> pool4 -> relu -> FC1 -> RelU -> FC2 -> Softmax 
 
-    rand_indices = np.random.choice(60000,batch_size,replace = False)
-    #print("\nExtracting Random Values..")
-    global y_batch_train,x_batch_train
-    x_batch_train = x_train[rand_indices]
-    x_batch_train = x_batch_train.reshape(batch_size,28,28,1)
-    y_batch_train = y_train[rand_indices]
+'''
 
-
-batch_size = 100
 epochs = 1000
-
+batch_size = 128
 
 gph = tf.Graph()
 with gph.as_default():
@@ -54,92 +72,50 @@ with gph.as_default():
     y = tf.placeholder('float',shape = (batch_size,10))
 
     initializer = tf.contrib.layers.xavier_initializer()
-    # --------------layer 1------------------
-    in_shape = tf.shape(x)
-    kern1 = tf.Variable(initializer(shape =(3,3,1,30)),name = "kern1")
-    map1 = tf.nn.conv2d(x,kern1,strides = [1,1,1,1],padding = 'VALID')
-    map_shape = tf.shape(map1)
-    bias1 = tf.Variable(initializer(shape = [30]),name = "bias1")
-    l1 = tf.nn.relu(map1 + bias1)
+    kern = [0]*4
+    bias = [0]*4
 
-    #---------pooling layer1------------------
-    l1_pool = tf.nn.max_pool(l1,[1,2,2,1],strides = [1,1,1,1],padding = 'VALID')
-    in_shape = tf.shape(l1_pool)
+    ls_filt_dims = [[3,3,1,16],[3,3,16,32],[3,3,32,64],[3,3,64,128]]
+    fmap = x
+    for i in range(4):
+        kern[i] = tf.Variable(initializer(shape = ls_filt_dims[i]))
+        bias[i] = tf.Variable(initializer(shape = [ls_filt_dims[i][3]]))
+        fmap = tf.nn.conv2d(fmap,kern[i],[1,1,1,1],'VALID')
+        layer = tf.nn.relu(fmap + bias[i])
+        layer_pool = tf.nn.max_pool(layer,[1,2,2,1],[1,1,1,1],'VALID')
+        fmap = layer_pool
 
-    #----------layer2---------------------
-    kern2 = tf.Variable(initializer(shape = (3,3,30,20)),name = "kern2")
-    map2 = tf.nn.conv2d(l1_pool,kern2,strides = [1,1,1,1],padding = 'VALID')
-    map_shape = tf.shape(map2)
-    bias2 = tf.Variable(initializer(shape = [20]),name = "bias2")
-    l2 = tf.nn.relu(map2+bias2)
-
-    # --------------pooling layer2---------------
-    l2_pool = tf.nn.max_pool(l2,[1,2,2,1],strides = [1,1,1,1],padding = 'VALID')
-    in_shape = tf.shape(l2_pool)
-
-    # ---------------layer3---------------------
-    kern3 = tf.Variable(initializer(shape=(3, 3,20, 10)),name = "kern3")
-    map3 = tf.nn.conv2d(l2_pool, kern3, strides=[1, 1, 1, 1], padding='VALID')
-    map_shape = tf.shape(map3)
-    bias3 = tf.Variable(initializer(shape=[10]),name = "bias3")
-    l3 = tf.nn.relu(map3 + bias3)
-
-    # --------------pooling layer3---------------
-    l3_pool = tf.nn.max_pool(l3, [1, 2, 2, 1], strides=[1, 1, 1, 1], padding='VALID')
-    in_shape = tf.shape(l3_pool)
-
-    # ---------------layer4---------------------
-    kern4 = tf.Variable(initializer(shape=(3, 3, 10, 5)),name = "kern4")
-    map4 = tf.nn.conv2d(l3_pool, kern4, strides=[1, 1, 1, 1], padding='VALID')
-    map_shape = tf.shape(map4)
-    bias4 = tf.Variable(initializer(shape=[5]),name = "bias4")
-    l4 = tf.nn.relu(map4 + bias4)
-
-    # --------------pooling layer4---------------
-    l4_pool = tf.nn.max_pool(l4, [1, 2, 2, 1], strides=[1, 1, 1, 1], padding='VALID')
-    in_shape = tf.shape(l4_pool)
+    #the list out_dims is calculated manually
+    out_dims = [batch_size,16,16,128]
+    flat_dim = out_dims[1]*out_dims[2]*out_dims[3]
 
     # fully connected layer
-    flat_dim = in_shape[1]*in_shape[2]*in_shape[3]
-    flayer_in = tf.reshape(l4_pool,shape = (in_shape[0],flat_dim))
-    fw1 = tf.Variable(initializer(shape = (16*16*5,100)),name = "fw1")
-    fb1 = tf.Variable(initializer(shape=[100]),name = "fb1")
-    fw2 = tf.Variable(initializer(shape = (100,50)),name = "fw2")
-    fb2 = tf.Variable(initializer(shape=[50]),name = "fb2")
-    fw3 = tf.Variable(initializer(shape=(50,25)),name = "fw3")
-    fb3 = tf.Variable(initializer(shape=[25]),name = "fb3")
-    fw4 = tf.Variable(initializer(shape=(25,10)),name = "fw4")
-    fb4 = tf.Variable(initializer(shape=[10]),name = "fb4")
+    fw = [0]*4
+    fb = [0]*4
 
-    fz1 = tf.matmul(flayer_in,fw1) + fb1
-    fa1 = tf.nn.relu(fz1)
+    ls_weight_dims = [[flat_dim, 128], [128, 64], [64, 32], [32, 10]]
+    fa = tf.reshape(fmap,shape = (out_dims[0],flat_dim))
+    for i in range(4):
+        fw[i] = tf.Variable(initializer(shape = ls_weight_dims[i]))
+        fb[i] = tf.Variable(initializer(shape = [ls_weight_dims[i][1]]))
+        fz = tf.matmul(fa,fw[i])+fb[i]
+        fa = tf.nn.relu(fz)
 
-    fz2 = tf.matmul(fa1, fw2) + fb2
-    fa2 = tf.nn.relu(fz2)
-
-    fz3 = tf.matmul(fa2, fw3) + fb3
-    fa3 = tf.nn.relu(fz3)
-
-    fz4 = tf.matmul(fa3, fw4) + fb4
-
-    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = fz4,labels=y))
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = fz,labels=y))
     opt = tf.train.AdamOptimizer().minimize(cost)
 
 with tf.Session(graph=gph) as sess:
     sess.run(tf.global_variables_initializer())
+    train_data = Data()
     ls_loss = []
-    data()
-    one_hot()
     for i in range(epochs):
-        get_training_data(batch_size)
-        _,loss = sess.run([opt,cost],feed_dict={x:x_batch_train,y:y_batch_train})
+        train_data.get_rand_batch(batch_size)
+        _,loss = sess.run([opt,cost],feed_dict={x:train_data.x_batch_train,y:train_data.y_batch_train})
         ls_loss.append(loss)
         print("epoch: ",i,"\tLoss: ",loss)
 
     plt.plot(range(epochs),ls_loss)
     plt.show()
-
-
 
 
 
