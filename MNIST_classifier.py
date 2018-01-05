@@ -64,12 +64,15 @@ Input -> conv1 -> pool1 -> relu-> conv2 -> pool2 -> relu-> conv3 -> pool3 -> rel
 epochs = 1000
 batch_size = 128
 
+start_learning = 0.1
+# learning rate at the start of training
+
 gph = tf.Graph()
 with gph.as_default():
 
     #define placeholders
-    x = tf.placeholder('float',shape = (batch_size,28,28,1))
-    y = tf.placeholder('float',shape = (batch_size,10))
+    x = tf.placeholder('float',shape = (None,28,28,1))
+    y = tf.placeholder('float',shape = (None,10))
 
     initializer = tf.contrib.layers.xavier_initializer()
     kern = [0]*4
@@ -86,7 +89,7 @@ with gph.as_default():
         fmap = layer_pool
 
     #the list out_dims is calculated manually
-    out_dims = [batch_size,16,16,128]
+    out_dims = [tf.shape(x)[0],16,16,128]
     flat_dim = out_dims[1]*out_dims[2]*out_dims[3]
 
     # fully connected layer
@@ -101,20 +104,37 @@ with gph.as_default():
         fz = tf.matmul(fa,fw[i])+fb[i]
         fa = tf.nn.relu(fz)
 
+    fa = tf.nn.softmax(logits=fz)
     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = fz,labels=y))
-    opt = tf.train.AdamOptimizer().minimize(cost)
+
+    global_step = tf.Variable(0, trainable=False)
+    learning_rate = tf.train.exponential_decay(start_learning,global_step,100,0.96,staircase=True)
+    #updates learning rate for every 100 epochs since we are doing batch training
+
+    opt = tf.train.AdamOptimizer(learning_rate).minimize(cost,global_step=global_step)
+    saver = tf.train.Saver()
 
 with tf.Session(graph=gph) as sess:
     sess.run(tf.global_variables_initializer())
     train_data = Data()
-    ls_loss = []
+    #test_data = Data(data_path="data/mnist_test.csv")
+
+    #x_test = test_data.x_train
+    #y_test = test_data.y_train
+
+    ls_train_loss = []
+    ls_test_loss = []
     for i in range(epochs):
         train_data.get_rand_batch(batch_size)
-        _,loss = sess.run([opt,cost],feed_dict={x:train_data.x_batch_train,y:train_data.y_batch_train})
-        ls_loss.append(loss)
-        print("epoch: ",i,"\tLoss: ",loss)
+        _,train_loss = sess.run([opt,cost],feed_dict={x:train_data.x_batch_train,y:train_data.y_batch_train})
+        #test_loss = sess.run(cost,feed_dict={x:x_test.reshape(10000,28,28,1),y:y_test})
+        ls_train_loss.append(train_loss)
+        #ls_test_loss.append(test_loss)
+        print("epoch: ",i,"\tLoss: ",train_loss)
 
-    plt.plot(range(epochs),ls_loss)
+    saver.save(sess,"cnnmodel/model1")
+    plt.plot(range(epochs),ls_train_loss,c = "blue")
+    #plt.plot(range(epochs), ls_test_loss, c="red")
     plt.show()
 
 
