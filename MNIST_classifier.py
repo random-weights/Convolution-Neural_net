@@ -5,36 +5,23 @@ import tensorflow as tf
 
 
 class Data():
+    def __init__(self):
+        self.size = 0
 
-    def __init__(self,data_path = None):
-        if data_path is None:
-            self.data_path = "data/mnist_train.csv"
-        else:
-            self.data_path = data_path
-        self.get_xdata()
-        self.get_ydata()
+    def get_xdata(self,x_data_path):
+        df = pd.read_csv(x_data_path, sep=',', header=None)
+        a = np.array(df).astype(int)
+        self.size = len(df)
+        a = a.reshape(self.size,28,28)
+        self.x_data = a
+        return self.x_data
 
-    def get_xdata(self):
-        df = pd.read_csv(self.data_path, sep=',', header=None)
-        self.labels = np.array(df[df.columns[0]])
-        df.drop(df.columns[0], axis=1, inplace=True)
-        a = np.zeros(shape=(len(df), 28, 28))
-        for i in range(len(df)):
-            a[i] = df.iloc[i].values.reshape(28, 28)
-        self.x_train = a
-
-    def get_ydata(self,labels = None):
-
-        if labels is None:
-            temp_labels = self.labels
-        else:
-            temp_labels = labels
-
-        a = np.array(temp_labels)
-        b = np.zeros((len(temp_labels), 10), dtype=np.int)
-        b[np.arange(len(temp_labels)), a] = 1
-        self.y_train = np.array(b)
-        return self.y_train
+    def get_ydata(self,y_data_path):
+        df = pd.read_csv(y_data_path,sep = ',',header = None)
+        b = np.array(df).astype(int)
+        b = b.reshape(len(df),10)
+        self.y_data = b
+        return self.y_data
 
     def get_rand_batch(self,batch_size = None):
         if batch_size is None:
@@ -42,10 +29,10 @@ class Data():
         else:
             b_size = batch_size
 
-        rand_indices = np.random.choice(60000, b_size, replace=False)
-        x_batch_train = self.x_train[rand_indices]
-        self.x_batch_train = x_batch_train.reshape(b_size, 28, 28, 1)
-        self.y_batch_train = self.y_train[rand_indices]
+        rand_indices = np.random.choice(self.size, b_size, replace=False)
+        x_batch = self.x_data[rand_indices]
+        self.x_batch = x_batch.reshape(b_size, 28, 28, 1)
+        self.y_batch = self.y_data[rand_indices]
 
 
 '''
@@ -64,7 +51,7 @@ Input -> conv1 -> pool1 -> relu-> conv2 -> pool2 -> relu-> conv3 -> pool3 -> rel
 epochs = 1000
 batch_size = 128
 
-start_learning = 0.1
+start_learning = 0.01
 # learning rate at the start of training
 
 gph = tf.Graph()
@@ -113,29 +100,19 @@ with gph.as_default():
 
     opt = tf.train.AdamOptimizer(learning_rate).minimize(cost,global_step=global_step)
     saver = tf.train.Saver()
+    
 
 with tf.Session(graph=gph) as sess:
     sess.run(tf.global_variables_initializer())
-    train_data = Data()
-    #test_data = Data(data_path="data/mnist_test.csv")
 
-    #x_test = test_data.x_train
-    #y_test = test_data.y_train
+    train_data = Data()
+    train_data.get_xdata("data/x_train.csv")
+    train_data.get_ydata("data/y_train.csv")
 
     ls_train_loss = []
-    ls_test_loss = []
     for i in range(epochs):
         train_data.get_rand_batch(batch_size)
-        _,train_loss = sess.run([opt,cost],feed_dict={x:train_data.x_batch_train,y:train_data.y_batch_train})
-        #test_loss = sess.run(cost,feed_dict={x:x_test.reshape(10000,28,28,1),y:y_test})
-        ls_train_loss.append(train_loss)
-        #ls_test_loss.append(test_loss)
+        _,train_loss = sess.run([opt,cost],feed_dict={x:train_data.x_batch,y:train_data.y_batch})
         print("epoch: ",i,"\tLoss: ",train_loss)
 
-    saver.save(sess,"cnnmodel/model1")
-    plt.plot(range(epochs),ls_train_loss,c = "blue")
-    #plt.plot(range(epochs), ls_test_loss, c="red")
-    plt.show()
-
-
-
+    #saver.save(sess,"cnnmodel/model1")
