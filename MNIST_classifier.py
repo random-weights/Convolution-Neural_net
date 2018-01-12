@@ -91,8 +91,11 @@ with gph.as_default():
         fz = tf.matmul(fa,fw[i])+fb[i]
         fa = tf.nn.relu(fz)
 
-    fa = tf.nn.softmax(logits=fz)
     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = fz,labels=y))
+
+    #calculating accuracy
+    fa = tf.nn.softmax(logits=fz)
+    _,acc = tf.metrics.accuracy(tf.argmax(fa,axis = 1),tf.argmax(y,axis = 1))
 
     global_step = tf.Variable(0, trainable=False)
     learning_rate = tf.train.exponential_decay(start_learning,global_step,100,0.96,staircase=True)
@@ -100,11 +103,11 @@ with gph.as_default():
 
     opt = tf.train.AdamOptimizer(learning_rate).minimize(cost,global_step=global_step)
     saver = tf.train.Saver()
-    
+
 
 with tf.Session(graph=gph) as sess:
     sess.run(tf.global_variables_initializer())
-
+    sess.run(tf.local_variables_initializer())
     train_data = Data()
     train_data.get_xdata("data/x_train.csv")
     train_data.get_ydata("data/y_train.csv")
@@ -112,7 +115,7 @@ with tf.Session(graph=gph) as sess:
     ls_train_loss = []
     for i in range(epochs):
         train_data.get_rand_batch(batch_size)
-        _,train_loss = sess.run([opt,cost],feed_dict={x:train_data.x_batch,y:train_data.y_batch})
-        print("epoch: ",i,"\tLoss: ",train_loss)
+        _,train_acc = sess.run([opt,acc],feed_dict={x:train_data.x_batch,y:train_data.y_batch})
+        print("epoch: ",i,"\tLoss: ",train_acc)
 
     #saver.save(sess,"cnnmodel/model1")
