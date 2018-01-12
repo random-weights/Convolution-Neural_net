@@ -57,35 +57,35 @@ start_learning = 0.01
 gph = tf.Graph()
 with gph.as_default():
 
-    #define placeholders
+    # define placeholders
     x = tf.placeholder('float',shape = (None,28,28,1))
     y = tf.placeholder('float',shape = (None,10))
 
     initializer = tf.contrib.layers.xavier_initializer()
-    kern = [0]*4
-    bias = [0]*4
+    kern = [0]*2
+    bias = [0]*2
 
-    ls_filt_dims = [[3,3,1,16],[3,3,16,32],[3,3,32,64],[3,3,64,128]]
+    ls_filt_dims = [[5,5,1,32],[5,5,32,64]]
     fmap = x
-    for i in range(4):
+    for i in range(2):
         kern[i] = tf.Variable(initializer(shape = ls_filt_dims[i]))
         bias[i] = tf.Variable(initializer(shape = [ls_filt_dims[i][3]]))
-        fmap = tf.nn.conv2d(fmap,kern[i],[1,1,1,1],'VALID')
+        fmap = tf.nn.conv2d(fmap,kern[i],[1,1,1,1],'SAME')
         layer = tf.nn.relu(fmap + bias[i])
-        layer_pool = tf.nn.max_pool(layer,[1,2,2,1],[1,1,1,1],'VALID')
+        layer_pool = tf.nn.max_pool(layer,[1,2,2,1],[1,2,2,1],'SAME')
         fmap = layer_pool
 
-    #the list out_dims is calculated manually
-    out_dims = [tf.shape(x)[0],16,16,128]
+    # the list out_dims is calculated manually
+    out_dims = [tf.shape(x)[0],7,7,64]
     flat_dim = out_dims[1]*out_dims[2]*out_dims[3]
 
     # fully connected layer
-    fw = [0]*4
-    fb = [0]*4
+    fw = [0]*2
+    fb = [0]*2
 
-    ls_weight_dims = [[flat_dim, 128], [128, 64], [64, 32], [32, 10]]
+    ls_weight_dims = [[flat_dim, 1024], [1024, 10]]
     fa = tf.reshape(fmap,shape = (out_dims[0],flat_dim))
-    for i in range(4):
+    for i in range(2):
         fw[i] = tf.Variable(initializer(shape = ls_weight_dims[i]))
         fb[i] = tf.Variable(initializer(shape = [ls_weight_dims[i][1]]))
         fz = tf.matmul(fa,fw[i])+fb[i]
@@ -93,13 +93,13 @@ with gph.as_default():
 
     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = fz,labels=y))
 
-    #calculating accuracy
+    # calculating accuracy
     fa = tf.nn.softmax(logits=fz)
     _,acc = tf.metrics.accuracy(tf.argmax(fa,axis = 1),tf.argmax(y,axis = 1))
 
     global_step = tf.Variable(0, trainable=False)
     learning_rate = tf.train.exponential_decay(start_learning,global_step,100,0.96,staircase=True)
-    #updates learning rate for every 100 epochs since we are doing batch training
+    # updates learning rate for every 100 epochs since we are doing batch training
 
     opt = tf.train.AdamOptimizer(learning_rate).minimize(cost,global_step=global_step)
     saver = tf.train.Saver()
@@ -112,10 +112,21 @@ with tf.Session(graph=gph) as sess:
     train_data.get_xdata("data/x_train.csv")
     train_data.get_ydata("data/y_train.csv")
 
-    ls_train_loss = []
-    for i in range(epochs):
+    i = 0
+    count = 0
+    while(i<epochs):
+        i = i+1
+        count += 1
         train_data.get_rand_batch(batch_size)
         _,train_acc = sess.run([opt,acc],feed_dict={x:train_data.x_batch,y:train_data.y_batch})
-        print("epoch: ",i,"\tLoss: ",train_acc)
+        print("epoch: ",i,"\tAccuracy: ",train_acc)
 
-    #saver.save(sess,"cnnmodel/model1")
+        if i == epochs-1:
+            flag = input("Continue(y/n): ")
+            if flag == 'y':
+                i = 0
+            else:
+                break
+
+    # saver.save(sess,"cnnmodel/model1")
+    plt.show()
