@@ -42,10 +42,15 @@ and compute FC layer dimensions.
 
 graph looks like:
 
-Input -> conv1 -> pool1 -> relu-> conv2 -> pool2 -> relu-> conv3 -> pool3 -> relu
+Input -> conv1 -> relu -> pool1-> conv2 -> relu -> pool2->
+ FC1 -> RelU -> FC2 -> Softmax 
 
--> conv4 -> pool4 -> relu -> FC1 -> RelU -> FC2 -> Softmax 
-
+kern windows size: 5 no.of kerns 32,64 stride: 1
+pool windows size: 2 stride: 2
+padding : SAME for both.
+FC1: 1024
+FC2: 10
+biases in all layers
 '''
 
 epochs = 1000
@@ -59,12 +64,41 @@ with gph.as_default():
 
     # define placeholders
     x = tf.placeholder('float',shape = (None,28,28,1))
-    y = tf.placeholder('float',shape = (None,10))
+    y_true = tf.placeholder('float',shape = (None,10))
+    y_true_cls = tf.argmax(y_true,axis = 1)
 
     initializer = tf.contrib.layers.xavier_initializer()
+
+    conv1 = tf.layers.conv2d(x,32,[5,5],[1,1],padding= 'same',activation = tf.nn.relu(),use_bias=True,kernel_initializer=initializer,
+                             bias_initializer=tf.zeros_initializer(),trainable=True,name = "conv1")
+    pool1 = tf.layers.max_pooling2d(conv1,[2,2],strides = [2,2],padding= "same",name = "pool1")
+
+    conv2 = tf.layers.conv2d(pool1,64,[5,5],[1,1],padding = "same",activation=tf.nn.relu(),
+                             use_bias=True,kernel_initializer=initializer,
+                             bias_initializer=tf.zeros_initializer(),trainable=True,name = "conv2")
+    pool2 = tf.layers.max_pooling2d(conv2, [2, 2], strides=[2, 2], padding="same", name="pool2")
+
+    flat_tensor = tf.layers.flatten(pool2,name = "flat_tensor")
+
+    fc1 = tf.layers.dense(flat_tensor,units = 1024,
+                          activation = tf.nn.relu(),
+                          use_bias=True,
+                          kernel_initializer=initializer,
+                          bias_initializer=tf.zeros_initializer(),
+                          trainable=True,
+                          name = "fc1")
+
+    fc2 = tf.layers.dense(fc1,units = 10,
+                          activation = None,
+                          use_bias = True,
+                          kernel_initializer=initializer,
+                          bias_initializer=tf.zeros_initializer(),
+                          trainable=True,
+                          name = "fc2")
+
+    '''
     kern = [0]*2
     bias = [0]*2
-
     ls_filt_dims = [[5,5,1,32],[5,5,32,64]]
     fmap = x
     for i in range(2):
@@ -90,12 +124,13 @@ with gph.as_default():
         fb[i] = tf.Variable(initializer(shape = [ls_weight_dims[i][1]]))
         fz = tf.matmul(fa,fw[i])+fb[i]
         fa = tf.nn.relu(fz)
-
-    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = fz,labels=y))
+'''
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = fc2,labels=y_true))
 
     # calculating accuracy
-    fa = tf.nn.softmax(logits=fz)
-    _,acc = tf.metrics.accuracy(tf.argmax(fa,axis = 1),tf.argmax(y,axis = 1))
+    y_pred = tf.nn.softmax(logits = fc2)
+    y_pred_cls = tf.argmax(y_pred,axis =1)
+    _,acc = tf.metrics.accuracy(tf.argmax(y_pred_cls,y_true_cls))
 
     global_step = tf.Variable(0, trainable=False)
     learning_rate = tf.train.exponential_decay(start_learning,global_step,100,0.96,staircase=True)
@@ -103,7 +138,6 @@ with gph.as_default():
 
     opt = tf.train.AdamOptimizer(learning_rate).minimize(cost,global_step=global_step)
     saver = tf.train.Saver()
-
 
 with tf.Session(graph=gph) as sess:
     sess.run(tf.global_variables_initializer())
